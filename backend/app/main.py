@@ -7,10 +7,7 @@ from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.security import HTTPBearer
-
-http_bearer = HTTPBearer(auto_error=False, scheme_name="HTTPBearer")
-
+from app.api.security import http_bearer
 from app.api import api_router
 from app.config import get_settings
 from app.core.memory import MemoryManager

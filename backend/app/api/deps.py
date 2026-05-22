@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
-from app.main import http_bearer
+from app.api.security import http_bearer
 from app.config import Settings, get_settings
 from app.core.memory import MemoryManager
 from app.core.providers import OllamaAvailability
