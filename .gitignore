@@ -8,3 +8,10 @@ dist/
 build/
 .cursor/
 .pytest_cache/
+data/
+backend/data/
+*.db
+uploads/
+chroma_db/
+backend/uploads/
+backend/chroma_db/

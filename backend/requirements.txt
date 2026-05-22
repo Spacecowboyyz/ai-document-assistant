@@ -5,3 +5,24 @@ python-dotenv==1.0.1
 pytest==8.3.4
 httpx==0.28.1
 pytest-asyncio==0.24.0
+# Phase 2 — RAG (local Ollama)
+langchain==0.3.14
+langchain-core==0.3.29
+langchain-community==0.3.14
+langchain-text-splitters==0.3.5
+langchain-chroma==0.2.0
+chromadb==0.5.23
+pymupdf==1.25.2
+ollama==0.4.7
+python-multipart==0.0.20
+sse-starlette==2.2.1
+aiofiles==24.1.0
+fpdf2==2.8.2
+pytest-mock==3.14.0
+# Phase 3 — Auth + SQLite
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+sqlalchemy==2.0.36
+alembic==1.14.0
+bcrypt==4.0.1
+email-validator==2.2.0
