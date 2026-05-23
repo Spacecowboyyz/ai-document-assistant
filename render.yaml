@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ai-doc-assistant-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    disk:
+      name: app-data
+      mountPath: /app/data
+      sizeGB: 1
+    envVars:
+      - key: AI_PROVIDER
+        value: groq
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:////app/data/app.db
+      - key: CHROMA_DB_PATH
+        value: /app/data/chroma_db
+      - key: UPLOADS_DIR
+        value: /app/data/uploads
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

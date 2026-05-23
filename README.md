@@ -17,10 +17,10 @@ Upload PDFs, ask questions, and get **streaming answers with page citations** �
 
 ```
 Browser (Vercel)
-    → FastAPI (Railway)
+    → FastAPI (Render)
         → Groq API (chat)
         → sentence-transformers (embeddings, in-container)
-        → ChromaDB + SQLite + PDFs on /app/data volume
+        → ChromaDB + SQLite + PDFs on /app/data disk
 ```
 
 Local development uses **Ollama** on your machine instead of Groq.
@@ -84,9 +84,9 @@ Full beginner-friendly steps: **[docs/deployment.md](docs/deployment.md)**
 Quick summary:
 
 1. **Groq API key** — [console.groq.com](https://console.groq.com) → API Keys → Create (free).
-2. **Railway** — deploy `backend/Dockerfile`, volume at `/app/data`, env from `.env.production.example`.
-3. **Vercel** — root `frontend/`, set `NEXT_PUBLIC_API_URL` to Railway URL.
-4. Update Railway `CORS_ORIGINS` to your Vercel URL.
+2. **Render** — **New Blueprint** from repo; `render.yaml` deploys Docker backend with disk at `/app/data`.
+3. **Vercel** — root `frontend/`, set `NEXT_PUBLIC_API_URL` to your Render URL.
+4. Set Render `CORS_ORIGINS` to your Vercel URL.
 
 ---
 
@@ -157,7 +157,7 @@ frontend/         Next.js UI
 docs/             deployment.md, architecture.md
 docker-compose.yml       Local Ollama dev
 docker-compose.prod.yml  Groq production test
-railway.json      Railway build config
+render.yaml       Render Blueprint (backend)
 ```
 
 ---
@@ -167,7 +167,7 @@ railway.json      Railway build config
 ```bash
 # After Phase 5 changes
 git add -A
-git commit -m "feat: Phase 5 production deployment (Groq + Railway + Vercel)"
+git commit -m "feat: Phase 5 production deployment (Groq + Render + Vercel)"
 git push origin main
 
 # Rollback if deployment fails
