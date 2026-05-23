@@ -39,48 +39,57 @@ export function useChat(docId: string) {
       setMessages((prev) => [...prev, userMessage, assistantPlaceholder])
       setIsStreaming(true)
 
-      await streamChat(
-        sessionIdRef.current,
-        { question: question.trim(), doc_id: docId },
-        (token) => {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? { ...msg, content: msg.content + token }
-                : msg
+      try {
+        await streamChat(
+          sessionIdRef.current,
+          { question: question.trim(), doc_id: docId },
+          (token) => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? { ...msg, content: msg.content + token }
+                  : msg
+              )
             )
-          )
-        },
-        (sources: Source[]) => {
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? {
-                    ...msg,
-                    isStreaming: false,
-                    sources,
-                  }
-                : msg
+          },
+          (sources: Source[]) => {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? {
+                      ...msg,
+                      isStreaming: false,
+                      sources,
+                    }
+                  : msg
+              )
             )
-          )
-          setIsStreaming(false)
-        },
-        (err) => {
-          setError(err)
-          setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === assistantId
-                ? {
-                    ...msg,
-                    content: msg.content || 'Failed to get a response.',
-                    isStreaming: false,
-                  }
-                : msg
+          },
+          (err) => {
+            setError(err)
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === assistantId
+                  ? {
+                      ...msg,
+                      content: msg.content || 'Failed to get a response.',
+                      isStreaming: false,
+                    }
+                  : msg
+              )
             )
+          }
+        )
+      } finally {
+        setIsStreaming(false)
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId && msg.isStreaming
+              ? { ...msg, isStreaming: false }
+              : msg
           )
-          setIsStreaming(false)
-        }
-      )
+        )
+      }
     },
     [docId, isStreaming]
   )

@@ -1,6 +1,5 @@
 'use client'
 
-import { motion } from 'framer-motion'
 import { ButtonHTMLAttributes, ReactNode } from 'react'
 import { LoadingSpinner } from './LoadingSpinner'
 
@@ -35,16 +34,14 @@ export function Button({
   const isDisabled = disabled || loading
 
   return (
-    <motion.button
+    <button
       type={type}
-      whileTap={isDisabled ? undefined : { scale: 0.98 }}
-      whileHover={isDisabled ? undefined : { scale: 1.01 }}
       disabled={isDisabled}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background active:scale-[0.98] hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 ${variants[variant]} ${className}`}
       {...props}
     >
       {loading && <LoadingSpinner size="sm" />}
       {children}
-    </motion.button>
+    </button>
   )
 }

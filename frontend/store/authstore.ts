@@ -4,8 +4,7 @@ import {
   setAccessToken,
   setRefreshToken,
   clearAllTokens,
-  refreshAccessToken,
-  getAccessToken,
+  ensureAccessToken,
 } from '@/lib/auth'
 import { login, register, getMe } from '@/lib/api'
 
@@ -59,23 +58,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   loadUser: async () => {
+    const token = await ensureAccessToken()
+    if (!token) {
+      set({ user: null, isAuthenticated: false })
+      return
+    }
+
     try {
-      if (!getAccessToken()) {
-        await refreshAccessToken()
-      }
       const user = await getMe()
       set({ user, isAuthenticated: true })
     } catch {
-      const token = await refreshAccessToken()
-      if (token) {
-        try {
-          const user = await getMe()
-          set({ user, isAuthenticated: true })
-          return
-        } catch {
-          // fall through
-        }
-      }
       set({ user: null, isAuthenticated: false })
     }
   },

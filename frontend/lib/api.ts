@@ -9,58 +9,66 @@ import {
   ChatRequest,
   Source,
 } from './types'
-import {
-  getAccessToken,
-  setAccessToken,
-  getRefreshToken,
-  clearAllTokens,
-  setRefreshToken,
-  refreshAccessToken,
-} from './auth'
-import { parseApiError, parseResponseError } from './errors'
+import { ensureAccessToken, clearAccessToken, clearAllTokens } from './auth'
+import { parseResponseError } from './errors'
 
+/** Proxied through Next.js rewrites (JSON + multipart). */
 const BASE_URL = '/api'
 
+/**
+ * Direct backend URL when NEXT_PUBLIC_API_URL is set.
+ * Use for SSE and multipart upload — Next.js rewrites can fail on those bodies.
+ * Set NEXT_PUBLIC_API_URL=http://localhost:8000 in .env.local
+ */
+function getDirectApiBase(): string {
+  const direct = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '')
+  return direct ? `${direct}/api` : BASE_URL
+}
+
+function getDirectApiUrl(path: string): string {
+  const base = getDirectApiBase()
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  return `${base}${normalizedPath}`
+}
+
+function buildAuthHeaders(token: string, options: RequestInit): Headers {
+  const headers = new Headers(options.headers)
+  headers.set('Authorization', `Bearer ${token}`)
+  if (options.body instanceof FormData) {
+    headers.delete('Content-Type')
+  }
+  return headers
+}
+
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = getAccessToken()
-  const headers: HeadersInit = {
-    ...options.headers,
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  const token = await ensureAccessToken()
+  if (!token) {
+    throw new Error('Not authenticated')
   }
 
-  let response = await fetch(`${BASE_URL}${url}`, { ...options, headers })
+  let response = await fetch(`${BASE_URL}${url}`, {
+    ...options,
+    headers: buildAuthHeaders(token, options),
+  })
 
   if (response.status === 401) {
-    const newToken = await refreshAccessToken()
-    if (newToken) {
-      const retryHeaders: HeadersInit = {
-        ...options.headers,
-        Authorization: `Bearer ${newToken}`,
-      }
-      response = await fetch(`${BASE_URL}${url}`, { ...options, headers: retryHeaders })
-    } else if (typeof window !== 'undefined') {
-      window.location.href = '/login'
+    clearAccessToken()
+    const newToken = await ensureAccessToken()
+    if (!newToken) {
+      throw new Error('Session expired')
     }
+
+    if (options.body instanceof FormData) {
+      throw new Error('Session expired during request. Please try again.')
+    }
+
+    response = await fetch(`${BASE_URL}${url}`, {
+      ...options,
+      headers: buildAuthHeaders(newToken, options),
+    })
   }
 
   return response
-}
-
-async function getAuthHeaders(): Promise<HeadersInit> {
-  let token = getAccessToken()
-  if (!token) {
-    token = await refreshAccessToken()
-  }
-  if (!token) {
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login'
-    }
-    throw new Error('Not authenticated')
-  }
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  }
 }
 
 // Auth
@@ -96,15 +104,28 @@ export async function getMe(): Promise<User> {
 
 // Documents
 export async function uploadDocument(file: File): Promise<UploadResponse> {
+  const token = await ensureAccessToken()
+  if (!token) {
+    throw new Error('Not authenticated')
+  }
+
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetchWithAuth('/v1/upload', {
+
+  // Bypass Next.js rewrite proxy (multipart can 500 inside Next with no backend logs)
+  const response = await fetch(getDirectApiUrl('/v1/upload'), {
     method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
     body: formData,
   })
+
   if (!response.ok) {
-    throw new Error(await parseResponseError(response, 'Upload failed'))
+    const text = await response.text()
+    throw new Error(text || 'Upload failed')
   }
+
   return response.json()
 }
 
@@ -128,42 +149,87 @@ export async function getModelsStatus(): Promise<ModelsStatus> {
   return response.json()
 }
 
+function parseSseLine(
+  line: string,
+  onToken: (token: string) => void,
+  onDone: (sources: Source[]) => void
+): boolean {
+  const trimmed = line.replace(/\r$/, '').trim()
+  if (!trimmed.startsWith('data:')) return false
+
+  const jsonStr = trimmed.slice(5).trim()
+  if (!jsonStr) return false
+
+  try {
+    const parsed = JSON.parse(jsonStr)
+    if (parsed.done) {
+      onDone(parsed.sources || [])
+      return true
+    }
+    if (parsed.token) {
+      onToken(parsed.token)
+    }
+  } catch {
+    // skip malformed chunk
+  }
+  return false
+}
+
+function processSseBuffer(
+  buffer: string,
+  onToken: (token: string) => void,
+  onDone: (sources: Source[]) => void
+): string {
+  const normalized = buffer.replace(/\r\n/g, '\n')
+  const lines = normalized.split('\n')
+  const remainder = lines.pop() ?? ''
+
+  for (const line of lines) {
+    if (parseSseLine(line, onToken, onDone)) {
+      return ''
+    }
+  }
+  return remainder
+}
+
 async function processSseStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   onToken: (token: string) => void,
   onDone: (sources: Source[]) => void
-): Promise<void> {
+): Promise<boolean> {
   const decoder = new TextDecoder()
   let buffer = ''
+  let receivedDone = false
+
+  const handleDone = (sources: Source[]) => {
+    receivedDone = true
+    onDone(sources)
+  }
 
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
 
     buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const jsonStr = line.slice(6).trim()
-        if (!jsonStr) continue
-        try {
-          const parsed = JSON.parse(jsonStr)
-          if (parsed.done) {
-            onDone(parsed.sources || [])
-          } else {
-            onToken(parsed.token || '')
-          }
-        } catch {
-          // skip malformed lines
-        }
-      }
+    buffer = processSseBuffer(buffer, onToken, handleDone)
+    if (receivedDone) {
+      await reader.cancel().catch(() => {})
+      return true
     }
   }
+
+  buffer += decoder.decode()
+  if (buffer) {
+    processSseBuffer(buffer, onToken, handleDone)
+    if (!receivedDone && buffer.trim()) {
+      parseSseLine(buffer, onToken, handleDone)
+    }
+  }
+
+  return receivedDone
 }
 
-// Chat SSE
+// Chat SSE — direct backend URL; token fetched immediately before each request
 export async function streamChat(
   sessionId: string,
   data: ChatRequest,
@@ -171,26 +237,45 @@ export async function streamChat(
   onDone: (sources: Source[]) => void,
   onError: (error: string) => void
 ): Promise<void> {
+  const streamBase = getDirectApiBase()
+  const path = `/v1/chat/${sessionId}`
+  const body = JSON.stringify(data)
+
   try {
-    let headers = await getAuthHeaders()
-    let response = await fetch(`${BASE_URL}/v1/chat/${sessionId}`, {
+    let token = await ensureAccessToken()
+    if (!token) {
+      onError('Session expired. Please log in again.')
+      return
+    }
+
+    let response = await fetch(`${streamBase}${path}`, {
       method: 'POST',
-      headers,
-      body: JSON.stringify(data),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        Accept: 'text/event-stream',
+      },
+      body,
+      cache: 'no-store',
     })
 
     if (response.status === 401) {
-      const newToken = await refreshAccessToken()
-      if (!newToken) {
+      clearAccessToken()
+      clearAllTokens()
+      token = await ensureAccessToken()
+      if (!token) {
         onError('Session expired. Please log in again.')
-        if (typeof window !== 'undefined') window.location.href = '/login'
         return
       }
-      headers = await getAuthHeaders()
-      response = await fetch(`${BASE_URL}/v1/chat/${sessionId}`, {
+      response = await fetch(`${streamBase}${path}`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify(data),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Accept: 'text/event-stream',
+        },
+        body,
+        cache: 'no-store',
       })
     }
 
@@ -206,7 +291,10 @@ export async function streamChat(
       return
     }
 
-    await processSseStream(reader, onToken, onDone)
+    const receivedDone = await processSseStream(reader, onToken, onDone)
+    if (!receivedDone) {
+      onDone([])
+    }
   } catch (err) {
     onError(err instanceof Error ? err.message : 'Connection error')
   }
