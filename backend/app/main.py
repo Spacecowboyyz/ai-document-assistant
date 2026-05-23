@@ -73,7 +73,10 @@ def create_app() -> FastAPI:
     )
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
+        allow_origins=["http://localhost:3000",
+        "https://ai-document-assistant-pearl.vercel.app",
+        "https://ai-document-assistant-ddjnjdzx3-spacecowboyyzs-projects.vercel.app",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
