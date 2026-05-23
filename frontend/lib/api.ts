@@ -10,7 +10,12 @@ import {
   Source,
 } from './types'
 import { ensureAccessToken, clearAccessToken, clearAllTokens } from './auth'
-import { parseResponseError } from './errors'
+import {
+  mapChatError,
+  mapHttpError,
+  mapNetworkError,
+  parseResponseError,
+} from './errors'
 
 /** Proxied through Next.js rewrites (JSON + multipart). */
 const BASE_URL = '/api'
@@ -79,7 +84,8 @@ export async function register(data: RegisterRequest): Promise<User> {
     body: JSON.stringify(data),
   })
   if (!response.ok) {
-    throw new Error(await parseResponseError(response, 'Registration failed'))
+    const detail = await parseResponseError(response, 'Registration failed')
+    throw new Error(mapHttpError(response.status, detail))
   }
   return response.json()
 }
@@ -91,7 +97,8 @@ export async function login(data: LoginRequest): Promise<TokenResponse> {
     body: JSON.stringify(data),
   })
   if (!response.ok) {
-    throw new Error(await parseResponseError(response, 'Login failed'))
+    const detail = await parseResponseError(response, 'Login failed')
+    throw new Error(mapHttpError(response.status, detail))
   }
   return response.json()
 }
@@ -122,8 +129,8 @@ export async function uploadDocument(file: File): Promise<UploadResponse> {
   })
 
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(text || 'Upload failed')
+    const detail = await parseResponseError(response, 'Upload failed')
+    throw new Error(mapHttpError(response.status, detail))
   }
 
   return response.json()
@@ -144,9 +151,27 @@ export async function deleteDocument(docId: string): Promise<void> {
 
 // Models status
 export async function getModelsStatus(): Promise<ModelsStatus> {
-  const response = await fetch(`${BASE_URL}/v1/models/status`)
-  if (!response.ok) throw new Error('Failed to get models status')
-  return response.json()
+  try {
+    const response = await fetch(`${BASE_URL}/v1/models/status`)
+    if (!response.ok) {
+      return {
+        ai_provider: 'ollama',
+        ollama: 'offline',
+        chat_model: '',
+        embed_model: '',
+        models_ready: false,
+      }
+    }
+    return response.json()
+  } catch {
+    return {
+      ai_provider: 'ollama',
+      ollama: 'offline',
+      chat_model: '',
+      embed_model: '',
+      models_ready: false,
+    }
+  }
 }
 
 function parseSseLine(
@@ -280,8 +305,8 @@ export async function streamChat(
     }
 
     if (!response.ok) {
-      const message = await parseResponseError(response, 'Chat failed')
-      onError(message)
+      const detail = await parseResponseError(response, 'Chat failed')
+      onError(mapHttpError(response.status, detail))
       return
     }
 
@@ -293,9 +318,15 @@ export async function streamChat(
 
     const receivedDone = await processSseStream(reader, onToken, onDone)
     if (!receivedDone) {
-      onDone([])
+      onError('Connection lost before the response finished. Please try again.')
+      return
     }
   } catch (err) {
-    onError(err instanceof Error ? err.message : 'Connection error')
+    if (err instanceof TypeError) {
+      onError(mapNetworkError('chat stream'))
+      return
+    }
+    const message = err instanceof Error ? err.message : 'Connection error'
+    onError(mapChatError(message))
   }
 }

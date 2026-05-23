@@ -26,3 +26,7 @@ sqlalchemy==2.0.36
 alembic==1.14.0
 bcrypt==4.0.1
 email-validator==2.2.0
+# Phase 5 — Production (Groq + local embeddings)
+# Install CPU torch first: pip install torch --index-url https://download.pytorch.org/whl/cpu
+groq>=0.4.0
+sentence-transformers>=2.2.0

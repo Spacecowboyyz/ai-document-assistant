@@ -1,3 +1,4 @@
+# Local development with host Ollama. For Groq production test: docker compose -f docker-compose.prod.yml up
 services:
   backend:
     build:

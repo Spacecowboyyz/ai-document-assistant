@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import Settings
 from app.core.memory import MemoryManager
-from app.core.providers import BaseChatProvider, OllamaAvailability
+from app.core.providers import AIAvailability, BaseChatProvider
 from app.core.vector_store import ChromaVectorStore
 from app.schemas.chat import SourceDocument
 
@@ -33,13 +33,13 @@ class RAGPipeline:
     def __init__(
         self,
         settings: Settings,
-        ollama: OllamaAvailability,
+        ai: AIAvailability,
         chat_provider: BaseChatProvider,
         vector_store: ChromaVectorStore,
         memory_manager: MemoryManager,
     ) -> None:
         self._settings = settings
-        self._ollama = ollama
+        self._ai = ai
         self._chat_provider = chat_provider
         self._vector_store = vector_store
         self._memory_manager = memory_manager
@@ -64,7 +64,7 @@ class RAGPipeline:
         question: str,
         doc_id: str,
     ) -> AsyncGenerator[dict[str, Any], None]:
-        await self._ollama.require_available()
+        await self._ai.require_available()
 
         retriever = _VectorRetriever(self._vector_store, doc_id)
         history = self._memory_manager.get_history_messages(session_id)

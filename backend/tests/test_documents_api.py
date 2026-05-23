@@ -15,6 +15,7 @@ async def api_client(db_session, mock_ollama_availability, mock_settings):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_db
+    app.state.ai_availability = mock_ollama_availability
     app.state.ollama_availability = mock_ollama_availability
     from app.core.memory import MemoryManager
 
@@ -88,6 +89,7 @@ async def test_upload_returns_503_when_ollama_offline(
     sample_pdf_path,
     offline_ollama,
 ):
+    app.state.ai_availability = offline_ollama
     app.state.ollama_availability = offline_ollama
     headers = await _auth_headers(api_client, "offline@example.com")
 

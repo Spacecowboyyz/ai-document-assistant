@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.core.pdf_parser import parse_pdf
 from app.core.provider_factory import get_embedding_provider
-from app.core.providers import OllamaAvailability
+from app.core.providers import AIAvailability
 from app.core.vector_store import ChromaVectorStore
 from app.models.document_meta import DocumentMeta
 from app.schemas.document import DeleteResponse, DocumentInfo, UploadResponse
@@ -21,17 +21,17 @@ class DocumentService:
     def __init__(
         self,
         settings: Settings,
-        ollama: OllamaAvailability,
+        ai: AIAvailability,
         db: Session,
     ) -> None:
         self._settings = settings
-        self._ollama = ollama
+        self._ai = ai
         self._db = db
-        embedding = get_embedding_provider(settings, ollama)
+        embedding = get_embedding_provider(settings, ai)
         self._vector_store = ChromaVectorStore(settings, embedding)
 
     async def ingest_upload(self, file: UploadFile, user_id: UUID) -> UploadResponse:
-        await self._ollama.require_available()
+        await self._ai.require_available()
 
         if not file.filename or not file.filename.lower().endswith(".pdf"):
             raise HTTPException(

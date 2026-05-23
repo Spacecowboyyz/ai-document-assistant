@@ -33,25 +33,35 @@ export function ModelsStatusBadge() {
     )
   }
 
-  let label = 'AI offline'
+  const provider = status.ai_provider ?? 'ollama'
+  const isGroq = provider === 'groq'
+
+  let label = 'Backend offline'
   let colorClass = 'bg-error/20 text-error border-error/30'
 
-  if (status.ollama === 'online' && status.models_ready) {
-    label = 'AI ready'
+  if (status.models_ready) {
+    label = isGroq ? 'Groq ready' : 'AI ready'
     colorClass = 'bg-success/20 text-success border-success/30'
   } else if (status.ollama === 'online') {
-    label = 'Models loading'
+    label = isGroq ? 'Groq configuring' : 'Models loading'
     colorClass = 'bg-warning/20 text-warning border-warning/30'
+  } else if (isGroq) {
+    label = 'Groq offline'
+  } else {
+    label = 'AI offline'
   }
+
+  const tooltip =
+    status.models_ready
+      ? `${status.chat_model} / ${status.embed_model}`
+      : isGroq
+        ? 'Set GROQ_API_KEY on the backend (console.groq.com)'
+        : 'Start Ollama: ollama serve'
 
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${colorClass}`}
-      title={
-        status.ollama === 'online'
-          ? `${status.chat_model} / ${status.embed_model}`
-          : 'Start Ollama: ollama serve'
-      }
+      title={tooltip}
     >
       <span
         className={`mr-1.5 h-1.5 w-1.5 rounded-full ${

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.security import http_bearer
 from app.config import Settings, get_settings
 from app.core.memory import MemoryManager
-from app.core.providers import OllamaAvailability
+from app.core.providers import AIAvailability
 from app.db.database import get_db
 from app.models.user import User
 from app.services.auth_service import get_user_from_access_token
@@ -18,8 +18,13 @@ def get_app_settings() -> Settings:
     return get_settings()
 
 
-def get_ollama(request: Request) -> OllamaAvailability:
-    return request.app.state.ollama_availability
+def get_ai_availability(request: Request) -> AIAvailability:
+    return request.app.state.ai_availability
+
+
+def get_ollama(request: Request) -> AIAvailability:
+    """Backward-compatible alias used by route dependencies."""
+    return get_ai_availability(request)
 
 
 def get_memory_manager(request: Request) -> MemoryManager:
@@ -43,8 +48,8 @@ def get_document_service(
     db: Session = Depends(get_db),
 ) -> DocumentService:
     settings = get_settings()
-    ollama = get_ollama(request)
-    return DocumentService(settings, ollama, db)
+    ai = get_ai_availability(request)
+    return DocumentService(settings, ai, db)
 
 
 def get_chat_service(
@@ -52,6 +57,6 @@ def get_chat_service(
     db: Session = Depends(get_db),
 ) -> ChatService:
     settings = get_settings()
-    ollama = get_ollama(request)
+    ai = get_ai_availability(request)
     memory = get_memory_manager(request)
-    return ChatService(settings, ollama, memory, db)
+    return ChatService(settings, ai, memory, db)

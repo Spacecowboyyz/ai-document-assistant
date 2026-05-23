@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    ai_provider: str = "ollama"
+    groq_api_key: str = ""
+    groq_chat_model: str = "llama3-8b-8192"
+
     ollama_base_url: str = "http://localhost:11434"
     ollama_chat_model: str = "llama3"
     ollama_embed_model: str = "nomic-embed-text"
@@ -32,12 +36,26 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     database_url: str = "sqlite:///./data/app.db"
 
+    @field_validator("ai_provider", mode="before")
+    @classmethod
+    def normalize_ai_provider(cls, value: object) -> str:
+        if value is None:
+            return "ollama"
+        normalized = str(value).strip().lower()
+        if normalized not in ("ollama", "groq"):
+            raise ValueError("AI_PROVIDER must be 'ollama' or 'groq'")
+        return normalized
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def strip_cors_origins(cls, value: object) -> object:
         if isinstance(value, str):
             return value.strip()
         return value
+
+    @property
+    def is_groq_mode(self) -> bool:
+        return self.ai_provider == "groq"
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -55,7 +73,8 @@ class Settings(BaseSettings):
 
     @property
     def chroma_path(self) -> Path:
-        return Path(self.chroma_db_path)
+        """Provider-scoped Chroma root — avoids 768 vs 384 dimension conflicts."""
+        return Path(self.chroma_db_path) / self.ai_provider
 
     @property
     def uploads_path(self) -> Path:

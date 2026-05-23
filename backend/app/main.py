@@ -11,7 +11,8 @@ from app.api.security import http_bearer
 from app.api import api_router
 from app.config import get_settings
 from app.core.memory import MemoryManager
-from app.core.providers import OllamaAvailability
+from app.core.provider_factory import get_ai_availability
+from app.core.providers import AIAvailability
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +33,25 @@ async def lifespan(app: FastAPI):
 
     run_migrations()
 
-    ollama = OllamaAvailability(settings)
-    await ollama.ping_startup()
-    if not ollama.online:
-        logger.warning(
-            "Ollama unreachable at startup; AI endpoints will return 503 until available"
-        )
+    ai: AIAvailability = get_ai_availability(settings)
+    await ai.ping_startup()
+    if not ai.models_ready:
+        if settings.is_groq_mode:
+            logger.warning(
+                "Groq not configured at startup; AI endpoints will return 503 until GROQ_API_KEY is set"
+            )
+        else:
+            logger.warning(
+                "Ollama unreachable at startup; AI endpoints will return 503 until available"
+            )
 
-    app.state.ollama_availability = ollama
+    app.state.ai_availability = ai
+    app.state.ollama_availability = ai
     app.state.memory_manager = MemoryManager()
 
     yield
 
-    await ollama.close()
+    await ai.close()
 
 
 def _path_requires_bearer(path: str) -> bool:

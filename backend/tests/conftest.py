@@ -46,6 +46,7 @@ def init_app_state(mock_ollama_availability):
     from app.core.memory import MemoryManager
 
     app = __import__("app.main", fromlist=["app"]).app
+    app.state.ai_availability = mock_ollama_availability
     app.state.ollama_availability = mock_ollama_availability
     app.state.memory_manager = MemoryManager()
     yield

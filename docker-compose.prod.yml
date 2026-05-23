@@ -1,0 +1,20 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      AI_PROVIDER: ${AI_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_CHAT_MODEL: ${GROQ_CHAT_MODEL:-llama3-8b-8192}
+      SECRET_KEY: ${SECRET_KEY}
+      DATABASE_URL: sqlite:////app/data/app.db
+      CHROMA_DB_PATH: /app/data/chroma_db
+      UPLOADS_DIR: /app/data/uploads
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      ENVIRONMENT: production
+    volumes:
+      - app_data:/app/data
+
+volumes:
+  app_data:

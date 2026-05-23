@@ -39,6 +39,7 @@ export interface Source {
 }
 
 export interface ModelsStatus {
+  ai_provider?: 'ollama' | 'groq'
   ollama: 'online' | 'offline'
   chat_model: string
   embed_model: string

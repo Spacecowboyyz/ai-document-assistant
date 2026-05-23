@@ -14,6 +14,7 @@ def test_client():
 
 @pytest.mark.asyncio
 async def test_models_status_offline(test_client, offline_ollama):
+    app.state.ai_availability = offline_ollama
     app.state.ollama_availability = offline_ollama
     get_settings.cache_clear()
 
@@ -33,6 +34,7 @@ async def test_models_status_online(mock_ollama_availability, monkeypatch):
     mock_ollama_availability.refresh = AsyncMock()
     mock_ollama_availability._online = True
     mock_ollama_availability._models_ready = True
+    app.state.ai_availability = mock_ollama_availability
     app.state.ollama_availability = mock_ollama_availability
 
     async with AsyncClient(
@@ -49,6 +51,7 @@ async def test_models_status_online(mock_ollama_availability, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_health_200_when_ollama_offline(offline_ollama):
+    app.state.ai_availability = offline_ollama
     app.state.ollama_availability = offline_ollama
 
     async with AsyncClient(

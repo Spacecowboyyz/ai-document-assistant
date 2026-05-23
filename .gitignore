@@ -15,3 +15,4 @@ uploads/
 chroma_db/
 backend/uploads/
 backend/chroma_db/
+backend/verify_data/

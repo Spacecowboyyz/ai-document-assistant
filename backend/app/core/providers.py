@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator, List
+from typing import Any, AsyncGenerator, List, Protocol, runtime_checkable
 from urllib.parse import urljoin
 
 import httpx
@@ -13,6 +13,7 @@ from app.config import Settings
 logger = logging.getLogger(__name__)
 
 NOMIC_EMBED_DIMENSION = 768
+SENTENCE_EMBED_DIMENSION = 384
 
 
 def build_ollama_unavailable_detail(settings: Settings) -> str:
@@ -23,6 +24,39 @@ def build_ollama_unavailable_detail(settings: Settings) -> str:
         f"ollama pull {settings.ollama_chat_model}\n"
         f"ollama pull {settings.ollama_embed_model}"
     )
+
+
+def build_groq_unavailable_detail(settings: Settings) -> str:
+    return (
+        "Groq AI is unavailable. Set GROQ_API_KEY in your environment. "
+        "Get a free key at https://console.groq.com"
+    )
+
+
+def build_groq_rate_limit_detail() -> str:
+    return (
+        "Groq rate limit reached. Please wait a moment and try again. "
+        "Free tier has per-minute request limits."
+    )
+
+
+@runtime_checkable
+class AIAvailability(Protocol):
+    @property
+    def online(self) -> bool: ...
+
+    @property
+    def models_ready(self) -> bool: ...
+
+    async def ping_startup(self) -> None: ...
+
+    async def refresh(self) -> None: ...
+
+    async def require_available(self) -> None: ...
+
+    def get_status_snapshot(self) -> dict[str, Any]: ...
+
+    async def close(self) -> None: ...
 
 
 class BaseEmbeddingProvider(ABC):
@@ -107,6 +141,7 @@ class OllamaAvailability:
 
     def get_status_snapshot(self) -> dict[str, Any]:
         return {
+            "ai_provider": "ollama",
             "ollama": "online" if self._online else "offline",
             "chat_model": self._settings.ollama_chat_model,
             "embed_model": self._settings.ollama_embed_model,

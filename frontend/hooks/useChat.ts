@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { streamChat } from '@/lib/api'
+import { mapChatError } from '@/lib/errors'
 import { ChatMessage, Source } from '@/lib/types'
 
 function generateId() {
@@ -66,7 +67,7 @@ export function useChat(docId: string) {
             )
           },
           (err) => {
-            setError(err)
+            setError(mapChatError(err))
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantId

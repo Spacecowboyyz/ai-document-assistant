@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getDocuments, uploadDocument, deleteDocument } from '@/lib/api'
 import { DocumentInfo } from '@/lib/types'
-import { parseApiError } from '@/lib/errors'
+import { mapNetworkError, mapUploadError } from '@/lib/errors'
 
 export function useDocuments() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([])
@@ -18,7 +18,13 @@ export function useDocuments() {
       const docs = await getDocuments()
       setDocuments(docs)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load documents')
+      setError(
+        err instanceof TypeError
+          ? mapNetworkError('documents')
+          : err instanceof Error
+            ? err.message
+            : 'Failed to load documents'
+      )
     } finally {
       setIsLoading(false)
     }
@@ -35,8 +41,7 @@ export function useDocuments() {
       await uploadDocument(file)
       await refetch()
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Upload failed'
-      setError(parseApiError(message, message))
+      setError(mapUploadError(err))
       throw err
     } finally {
       setIsUploading(false)

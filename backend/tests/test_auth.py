@@ -20,6 +20,7 @@ async def api_client(db_session, mock_ollama_availability, mock_settings):
         yield db_session
 
     app.dependency_overrides[get_db] = _override_db
+    app.state.ai_availability = mock_ollama_availability
     app.state.ollama_availability = mock_ollama_availability
     from app.core.memory import MemoryManager
 
