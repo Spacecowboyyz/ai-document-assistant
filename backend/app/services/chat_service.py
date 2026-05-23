@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 from uuid import UUID
+
+KEEPALIVE_INTERVAL_SECONDS = 15.0
 
 from sqlalchemy.orm import Session
 
@@ -46,6 +49,25 @@ class ChatService:
     def verify_doc_access(self, user_id: UUID, doc_id: str) -> None:
         self._document_service.get_owned_document(doc_id, user_id)
 
+    @staticmethod
+    def _keepalive_sse_line() -> str:
+        payload = json.dumps({"token": "", "done": False, "keepalive": True})
+        return f"data: {payload}\n\n"
+
+    def _event_to_sse_line(self, event: dict[str, Any]) -> str:
+        safe_event: dict[str, Any] = {}
+        for key, value in event.items():
+            if key == "sources" and value:
+                safe_event[key] = [
+                    src.model_dump()
+                    if isinstance(src, SourceDocument)
+                    else src
+                    for src in value
+                ]
+            else:
+                safe_event[key] = value
+        return f"data: {json.dumps(safe_event)}\n\n"
+
     async def stream_chat(
         self,
         user_id: UUID,
@@ -55,23 +77,23 @@ class ChatService:
         await self._ai.require_available()
         scoped_session = self._scoped_session_id(user_id, session_id)
 
-        async for event in self._rag.astream_response(
+        rag_stream = self._rag.astream_response(
             scoped_session,
             request.question,
             request.doc_id,
-        ):
-            safe_event: dict = {}
+        )
+        rag_iter = rag_stream.__aiter__()
 
-            for key, value in event.items():
-                if key == "sources" and value:
-                    safe_event[key] = [
-                        src.model_dump()
-                        if isinstance(src, SourceDocument)
-                        else src
-                        for src in value
-                    ]
-                else:
-                    safe_event[key] = value
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    rag_iter.__anext__(),
+                    timeout=KEEPALIVE_INTERVAL_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                yield self._keepalive_sse_line()
+                continue
+            except StopAsyncIteration:
+                break
 
-            payload = json.dumps(safe_event)
-            yield f"data: {payload}\n\n"
+            yield self._event_to_sse_line(event)

@@ -187,6 +187,9 @@ function parseSseLine(
 
   try {
     const parsed = JSON.parse(jsonStr)
+    if (parsed.keepalive && !parsed.done && !parsed.token) {
+      return false
+    }
     if (parsed.done) {
       onDone(parsed.sources || [])
       return true
