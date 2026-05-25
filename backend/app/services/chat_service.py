@@ -15,7 +15,7 @@ from app.core.provider_factory import get_chat_provider, get_embedding_provider
 from app.core.providers import AIAvailability
 from app.core.rag_pipeline import RAGPipeline
 from app.core.vector_store import ChromaVectorStore
-from app.schemas.chat import ChatRequest, SourceDocument
+from app.schemas.chat import ChatRequest, ChatSyncResponse, SourceDocument
 from app.services.document_service import DocumentService
 
 
@@ -97,3 +97,39 @@ class ChatService:
                 break
 
             yield self._event_to_sse_line(event)
+
+    @staticmethod
+    def _normalize_sources(raw_sources: Any) -> list[SourceDocument]:
+        normalized: list[SourceDocument] = []
+        for item in raw_sources or []:
+            if isinstance(item, SourceDocument):
+                normalized.append(item)
+            elif isinstance(item, dict):
+                normalized.append(SourceDocument(**item))
+        return normalized
+
+    async def chat_sync(
+        self,
+        user_id: UUID,
+        session_id: str,
+        request: ChatRequest,
+    ) -> ChatSyncResponse:
+        """Collect full streaming response and return as single JSON."""
+        await self._ai.require_available()
+        self.verify_doc_access(user_id, request.doc_id)
+
+        scoped_session = self._scoped_session_id(user_id, session_id)
+        full_answer = ""
+        sources: list[SourceDocument] = []
+
+        async for event in self._rag.astream_response(
+            scoped_session,
+            request.question,
+            request.doc_id,
+        ):
+            if event.get("done"):
+                sources = self._normalize_sources(event.get("sources", []))
+            else:
+                full_answer += event.get("token", "")
+
+        return ChatSyncResponse(answer=full_answer, sources=sources)

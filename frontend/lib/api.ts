@@ -257,6 +257,58 @@ async function processSseStream(
   return receivedDone
 }
 
+export async function syncChat(
+  sessionId: string,
+  data: ChatRequest
+): Promise<{ answer: string; sources: Source[] }> {
+  let token = await ensureAccessToken()
+  if (!token) {
+    throw new Error('Not authenticated')
+  }
+
+  const url = getDirectApiUrl(`/v1/chat/${sessionId}/sync`)
+  const body = JSON.stringify(data)
+
+  let response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body,
+  })
+
+  if (response.status === 401) {
+    clearAccessToken()
+    token = await ensureAccessToken()
+    if (!token) {
+      throw new Error('Session expired. Please log in again.')
+    }
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body,
+    })
+  }
+
+  if (!response.ok) {
+    const detail = await parseResponseError(response, 'Chat failed')
+    throw new Error(mapHttpError(response.status, detail))
+  }
+
+  return response.json()
+}
+
+const CONNECTION_LOST_MESSAGE =
+  'Connection lost before the response finished. Please try again.'
+
+export function isConnectionLostError(message: string): boolean {
+  return message.includes('Connection lost before the response finished')
+}
+
 // Chat SSE — direct backend URL; token fetched immediately before each request
 export async function streamChat(
   sessionId: string,
@@ -321,7 +373,7 @@ export async function streamChat(
 
     const receivedDone = await processSseStream(reader, onToken, onDone)
     if (!receivedDone) {
-      onError('Connection lost before the response finished. Please try again.')
+      onError(CONNECTION_LOST_MESSAGE)
       return
     }
   } catch (err) {

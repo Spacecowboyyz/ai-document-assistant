@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useRef, useState } from 'react'
-import { streamChat } from '@/lib/api'
+import { isConnectionLostError, streamChat, syncChat } from '@/lib/api'
 import { mapChatError } from '@/lib/errors'
 import { ChatMessage, Source } from '@/lib/types'
 
@@ -18,12 +18,14 @@ export function useChat(docId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [usedSyncFallback, setUsedSyncFallback] = useState(false)
 
   const sendMessage = useCallback(
     async (question: string) => {
       if (!question.trim() || isStreaming) return
 
       setError(null)
+      setUsedSyncFallback(false)
       const userMessage: ChatMessage = {
         id: generateId(),
         role: 'user',
@@ -40,10 +42,29 @@ export function useChat(docId: string) {
       setMessages((prev) => [...prev, userMessage, assistantPlaceholder])
       setIsStreaming(true)
 
+      const chatRequest = { question: question.trim(), doc_id: docId }
+      let shouldTrySyncFallback = false
+
+      const applySyncResponse = (answer: string, sources: Source[]) => {
+        setUsedSyncFallback(true)
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantId
+              ? {
+                  ...msg,
+                  content: answer,
+                  isStreaming: false,
+                  sources,
+                }
+              : msg
+          )
+        )
+      }
+
       try {
         await streamChat(
           sessionIdRef.current,
-          { question: question.trim(), doc_id: docId },
+          chatRequest,
           (token) => {
             setMessages((prev) =>
               prev.map((msg) =>
@@ -67,7 +88,40 @@ export function useChat(docId: string) {
             )
           },
           (err) => {
-            setError(mapChatError(err))
+            if (isConnectionLostError(err)) {
+              shouldTrySyncFallback = true
+            } else {
+              setError(mapChatError(err))
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantId
+                    ? {
+                        ...msg,
+                        content: msg.content || 'Failed to get a response.',
+                        isStreaming: false,
+                      }
+                    : msg
+                )
+              )
+            }
+          }
+        )
+
+        if (shouldTrySyncFallback) {
+          try {
+            const { answer, sources } = await syncChat(
+              sessionIdRef.current,
+              chatRequest
+            )
+            applySyncResponse(answer, sources)
+          } catch (fallbackErr) {
+            setError(
+              mapChatError(
+                fallbackErr instanceof Error
+                  ? fallbackErr.message
+                  : 'Chat failed'
+              )
+            )
             setMessages((prev) =>
               prev.map((msg) =>
                 msg.id === assistantId
@@ -80,7 +134,34 @@ export function useChat(docId: string) {
               )
             )
           }
-        )
+        }
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          isConnectionLostError(err.message)
+        ) {
+          try {
+            const { answer, sources } = await syncChat(
+              sessionIdRef.current,
+              chatRequest
+            )
+            applySyncResponse(answer, sources)
+          } catch (fallbackErr) {
+            setError(
+              mapChatError(
+                fallbackErr instanceof Error
+                  ? fallbackErr.message
+                  : 'Chat failed'
+              )
+            )
+          }
+        } else {
+          setError(
+            mapChatError(
+              err instanceof Error ? err.message : 'Connection error'
+            )
+          )
+        }
       } finally {
         setIsStreaming(false)
         setMessages((prev) =>
@@ -99,6 +180,7 @@ export function useChat(docId: string) {
     messages,
     isStreaming,
     error,
+    usedSyncFallback,
     sendMessage,
   }
 }

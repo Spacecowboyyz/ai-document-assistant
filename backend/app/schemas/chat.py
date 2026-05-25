@@ -16,3 +16,8 @@ class StreamToken(BaseModel):
     token: str
     done: bool = False
     sources: list[SourceDocument] | None = None
+
+
+class ChatSyncResponse(BaseModel):
+    answer: str
+    sources: list[SourceDocument] = []
