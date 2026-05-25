@@ -7,7 +7,7 @@ from typing import Any, AsyncGenerator
 from fastapi import HTTPException
 from groq import APIStatusError, AsyncGroq, RateLimitError
 
-from app.config import Settings
+from app.config import Settings, get_settings, read_groq_api_key
 from app.core.groq_availability import GroqAvailability
 from app.core.providers import (
     BaseChatProvider,
@@ -45,10 +45,18 @@ class GroqChatProvider(BaseChatProvider):
         self._settings = settings
         self._availability = availability
         self._client: AsyncGroq | None = None
+        self._client_api_key: str | None = None
 
     def _get_client(self) -> AsyncGroq:
-        if self._client is None:
-            self._client = AsyncGroq(api_key=self._settings.groq_api_key)
+        api_key = read_groq_api_key()
+        if not api_key:
+            raise HTTPException(
+                status_code=503,
+                detail=build_groq_unavailable_detail(get_settings()),
+            )
+        if self._client is None or self._client_api_key != api_key:
+            self._client = AsyncGroq(api_key=api_key)
+            self._client_api_key = api_key
         return self._client
 
     async def astream(self, messages: Any) -> AsyncGenerator[str, None]:
@@ -57,7 +65,7 @@ class GroqChatProvider(BaseChatProvider):
 
         try:
             stream = await self._get_client().chat.completions.create(
-                model=self._settings.groq_chat_model,
+                model=get_settings().groq_chat_model,
                 messages=groq_messages,
                 stream=True,
                 temperature=0,

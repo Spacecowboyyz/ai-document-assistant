@@ -27,6 +27,19 @@ def groq_settings(monkeypatch, tmp_path) -> Settings:
 
 
 @pytest.mark.asyncio
+async def test_read_groq_api_key_prefers_live_env(monkeypatch, tmp_path):
+    from app.config import get_settings, read_groq_api_key
+
+    monkeypatch.setenv("GROQ_API_KEY", "")
+    get_settings.cache_clear()
+    get_settings()  # cache settings without a key
+
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_from_env")
+    assert read_groq_api_key() == "gsk_from_env"
+    assert GroqAvailability().has_api_key() is True
+
+
+@pytest.mark.asyncio
 async def test_groq_availability_requires_api_key(monkeypatch, tmp_path):
     monkeypatch.setenv("AI_PROVIDER", "groq")
     monkeypatch.setenv("GROQ_API_KEY", "")

@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -35,6 +36,13 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
     database_url: str = "sqlite:///./data/app.db"
+
+    @field_validator("groq_api_key", mode="before")
+    @classmethod
+    def strip_groq_api_key(cls, value: object) -> str:
+        if value is None:
+            return ""
+        return str(value).strip()
 
     @field_validator("ai_provider", mode="before")
     @classmethod
@@ -91,3 +99,11 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def read_groq_api_key() -> str:
+    """Read Groq API key at call time; prefer live env over cached settings."""
+    env_key = os.getenv("GROQ_API_KEY")
+    if env_key is not None and env_key.strip():
+        return env_key.strip()
+    return get_settings().groq_api_key.strip()
