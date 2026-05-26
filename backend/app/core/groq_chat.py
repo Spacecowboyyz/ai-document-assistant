@@ -101,5 +101,5 @@ class GroqChatProvider(BaseChatProvider):
             logger.warning("Groq chat streaming failed: %s", exc)
             raise HTTPException(
                 status_code=503,
-                detail=build_groq_unavailable_detail(self._settings),
+                detail=f"Chat failed: {str(exc)}",
             ) from exc
